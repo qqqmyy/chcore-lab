@@ -120,6 +120,32 @@ static int printk_write_num(char **out, long long i, int base, int sign,
 	// 1. the last postion of this buffer must be '\0'
 	// 2. the format is only decided by `base` and `letbase` here
 
+	s = print_buf + PRINT_BUF_LEN - 1;
+	*s = '\0';
+	while(u > 0)
+	{
+		s--;
+		t = u % base;
+		if(t <= 9)
+		{
+			*s = t + '0';
+		}
+		else
+		{
+			if (letbase)
+			{
+				*s = t - 10 + 'a';
+			}
+			else
+			{
+				*s = t - 10 + 'A';
+			}
+		}
+		u = u / base;
+	}
+
+
+
 	if (neg) {
 		if (width && (flags & PAD_ZERO)) {
 			simple_outputchar(out, '-');
