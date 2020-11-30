@@ -126,3 +126,5 @@ typedef union {
 typedef struct {
 	pte_t ent[PTP_ENTRIES];
 } ptp_t;
+
+int get_next_ptp(ptp_t * cur_ptp, u32 level, vaddr_t va, ptp_t ** next_ptp, pte_t ** pte, bool alloc);

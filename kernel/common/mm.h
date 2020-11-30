@@ -17,6 +17,8 @@
 #include <common/mmu.h>
 
 #define PAGE_SIZE (0x1000)
+#define BLOCK_SHIFT (21)
+#define BLOCK_SIZE (1UL << BLOCK_SHIFT)
 
 void arch_mm_init(void);
 void mm_init();

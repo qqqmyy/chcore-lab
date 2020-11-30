@@ -14,10 +14,13 @@
 #include <common/kprint.h>
 #include <common/macro.h>
 
+
 #include "buddy.h"
 #include "slab.h"
+#include "page_table.h"
 
 extern unsigned long *img_end;
+// struct global_mem global_mem;
 
 #define PHYSICAL_MEM_START (24*1024*1024)	//24M
 
@@ -25,6 +28,12 @@ extern unsigned long *img_end;
 #define NPAGES (128*1000)
 
 #define PHYSICAL_MEM_END (PHYSICAL_MEM_START+NPAGES*BUDDY_PAGE_SIZE)
+
+extern void parse_mem_map(void *);
+extern void arch_mm_init(void);
+
+int physmem_map_num;
+u64 physmem_map[8][2];
 
 /*
  * Layout:
@@ -51,6 +60,43 @@ unsigned long get_ttbr1(void)
 void map_kernel_space(vaddr_t va, paddr_t pa, size_t len)
 {
 	// <lab2>
+	ptp_t *l0_ptp, *l1_ptp, *l2_ptp, *l3_ptp;
+	pte_t *pte;
+	int ret;
+	vaddr_t *pgtbl = (vaddr_t *)(get_ttbr1());
+
+	size_t n = len/2097152;
+
+	for (int i = 0; i < n; i++) {
+		// L0 page table
+		l0_ptp = (ptp_t *)pgtbl;
+		ret = get_next_ptp(l0_ptp, 0, va, &l1_ptp, &pte, true);
+
+		if (ret < 0) {
+			// return ret;
+		}
+		// L1 page table
+		ret = get_next_ptp(l1_ptp, 1, va, &l2_ptp, &pte, true);
+
+		if (ret < 0) {
+			// return ret;
+		}
+
+		// L2 page table
+		ret = get_next_ptp(l2_ptp, 2, va, &l3_ptp, &pte, true);
+
+		if (ret < 0) {
+			// return ret;
+		}
+		pte->l2_block.pfn = pa >> 21;
+		pte->l2_block.UXN = 1;
+		pte->l2_block.AF = 1;
+		pte->l2_block.SH = 3;
+		pte->l2_block.is_valid = 1;
+		pte->l2_block.is_table = 0;
+		va += 2097152;
+		pa += 2097152;
+	}
 
 	// </lab2>
 }
