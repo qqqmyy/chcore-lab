@@ -14,13 +14,10 @@
 #include <common/kprint.h>
 #include <common/macro.h>
 
-
 #include "buddy.h"
 #include "slab.h"
-#include "page_table.h"
 
 extern unsigned long *img_end;
-// struct global_mem global_mem;
 
 #define PHYSICAL_MEM_START (24*1024*1024)	//24M
 
@@ -28,12 +25,6 @@ extern unsigned long *img_end;
 #define NPAGES (128*1000)
 
 #define PHYSICAL_MEM_END (PHYSICAL_MEM_START+NPAGES*BUDDY_PAGE_SIZE)
-
-extern void parse_mem_map(void *);
-extern void arch_mm_init(void);
-
-int physmem_map_num;
-u64 physmem_map[8][2];
 
 /*
  * Layout:
@@ -60,44 +51,29 @@ unsigned long get_ttbr1(void)
 void map_kernel_space(vaddr_t va, paddr_t pa, size_t len)
 {
 	// <lab2>
-	ptp_t *l0_ptp, *l1_ptp, *l2_ptp, *l3_ptp;
-	pte_t *pte;
-	int ret;
-	vaddr_t *pgtbl = (vaddr_t *)(get_ttbr1());
+	#define IS_VALID (1UL << 0)
+	#define UXN	       (0x1UL << 54)
+	#define ACCESSED       (0x1UL << 10)
+	#define INNER_SHARABLE (0x3UL << 8)
+	#define NORMAL_MEMORY  (0x4UL << 2)
 
-	size_t n = len/2097152;
-
-	for (int i = 0; i < n; i++) {
-		// L0 page table
-		l0_ptp = (ptp_t *)pgtbl;
-		ret = get_next_ptp(l0_ptp, 0, va, &l1_ptp, &pte, true);
-
-		if (ret < 0) {
-			// return ret;
-		}
-		// L1 page table
-		ret = get_next_ptp(l1_ptp, 1, va, &l2_ptp, &pte, true);
-
-		if (ret < 0) {
-			// return ret;
-		}
-
-		// L2 page table
-		ret = get_next_ptp(l2_ptp, 2, va, &l3_ptp, &pte, true);
-
-		if (ret < 0) {
-			// return ret;
-		}
-		pte->l2_block.pfn = pa >> 21;
-		pte->l2_block.UXN = 1;
-		pte->l2_block.AF = 1;
-		pte->l2_block.SH = 3;
-		pte->l2_block.is_valid = 1;
-		pte->l2_block.is_table = 0;
-		va += 2097152;
-		pa += 2097152;
+	#define GET_L0_INDEX(x) (((x) >> (12 + 9 + 9 + 9)) & 0x1ff)
+	#define GET_L1_INDEX(x) (((x) >> (12 + 9 + 9)) & 0x1ff)
+	#define GET_L2_INDEX(x) (((x) >> (12 + 9)) & 0x1ff)
+	u64 *pgd = get_ttbr1() + KBASE;
+	len = ROUND_UP(len, (PAGE_SIZE << 9));
+	for (size_t mapped = 0; mapped < len; mapped += (PAGE_SIZE << 9)) {
+		u32 l0_idx = GET_L0_INDEX(va + mapped);
+		u64 *l1_tbl = (pgd[l0_idx] & ~0xFF) + KBASE;
+		u32 l1_idx = GET_L1_INDEX(va + mapped);
+		u64 *l2_tbl = (l1_tbl[l1_idx] & ~0xFF) + KBASE;
+		u32 l2_idx = GET_L2_INDEX(va + mapped);
+		l2_tbl[l2_idx] = (pa + mapped) | UXN	/* Unprivileged execute never */
+		    | ACCESSED	/* Set access flag */
+		    | INNER_SHARABLE	/* Sharebility */
+		    | NORMAL_MEMORY	/* Normal memory */
+		    | IS_VALID;
 	}
-
 	// </lab2>
 }
 
