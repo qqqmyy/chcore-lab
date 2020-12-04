@@ -44,6 +44,5 @@ int stack_backtrace()
 		fp = (u64*) *fp;
 		
 	}
-
 	return 0;
 }
