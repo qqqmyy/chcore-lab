@@ -52,7 +52,48 @@ struct thread idle_threads[PLAT_CPU_NUM];
  */
 int rr_sched_enqueue(struct thread *thread)
 {
-	return -1;
+	if (thread == NULL || thread->thread_ctx == NULL || thread->thread_ctx->state == TS_READY) {
+		return -EINVAL;
+	}
+
+	if (thread->thread_ctx->type == TYPE_IDLE) {
+		return 0;
+	}
+
+	s32 affinity = thread->thread_ctx->affinity;
+	if (affinity == NO_AFF) {
+		affinity = smp_get_cpu_id();
+	}
+
+	if (affinity >= PLAT_CPU_NUM) {
+		return -EINVAL;
+	}
+
+	thread->thread_ctx->state = TS_READY;
+	thread->thread_ctx->cpuid = affinity;
+	list_append(&thread->ready_queue_node, &rr_ready_queue[affinity]);
+	return 0;
+
+	//pre-check boundary condition: NULL-pointer, enqueue ready thread, idle thread
+	// if(thread == NULL || thread->thread_ctx == NULL || thread->thread_ctx->state == TS_READY){
+	// 	return -EINVAL;
+	// }
+	// if(thread->thread_ctx->type == TYPE_IDLE){
+	// 	return 0; //return common val
+	// }
+
+	// u32 cpu_id = smp_get_cpu_id();
+	// if(thread->thread_ctx->affinity != NO_AFF){ // assign to specific cpu core id
+	// 	cpu_id = thread->thread_ctx->affinity;
+	// }
+	// if(cpu_id >= PLAT_CPU_NUM){
+	// 	return -EINVAL;
+	// }
+
+	// list_append(&thread->ready_queue_node, &rr_ready_queue[cpu_id]);
+	// thread->thread_ctx->state = TS_READY;
+	// thread->thread_ctx->cpuid = cpu_id; //must set cpu id (what if different affinity cpu id)
+	// return 0;
 }
 
 /*
@@ -63,7 +104,15 @@ int rr_sched_enqueue(struct thread *thread)
  */
 int rr_sched_dequeue(struct thread *thread)
 {
-	return -1;
+	if (thread == NULL || thread->thread_ctx == NULL
+		|| thread->thread_ctx->type == TYPE_IDLE
+		|| thread->thread_ctx->state != TS_READY) {
+		return -EINVAL;
+	}
+
+	thread->thread_ctx->state = TS_INTER;
+	list_del(&thread->ready_queue_node);
+	return 0;
 }
 
 /*
@@ -79,11 +128,20 @@ int rr_sched_dequeue(struct thread *thread)
  */
 struct thread *rr_sched_choose_thread(void)
 {
-	return NULL;
+	u32 cpuid = smp_get_cpu_id();
+	if (list_empty(&rr_ready_queue[cpuid])) {
+		return &idle_threads[cpuid];
+	}
+
+	struct thread *target = list_entry(rr_ready_queue[cpuid].next, struct thread, ready_queue_node);
+
+	BUG_ON(rr_sched_dequeue(target));
+	return target;
 }
 
 static inline void rr_sched_refill_budget(struct thread *target, u32 budget)
 {
+	target->thread_ctx->sc->budget = budget;
 }
 
 /*
@@ -100,7 +158,18 @@ static inline void rr_sched_refill_budget(struct thread *target, u32 budget)
  */
 int rr_sched(void)
 {
-	return -1;
+	if (current_thread != NULL && current_thread->thread_ctx->type != TYPE_IDLE
+		&& current_thread->thread_ctx->sc->budget != 0) {
+		return 0;
+	} 
+	struct thread* target = rr_sched_choose_thread();
+	BUG_ON(target == NULL);
+	if (current_thread != NULL) {
+		current_thread->thread_ctx->state = TS_INTER;
+		rr_sched_enqueue(current_thread);
+	}
+	rr_sched_refill_budget(target, DEFAULT_BUDGET);
+	return switch_to_thread(target);
 }
 
 /*
@@ -141,6 +210,11 @@ int rr_sched_init(void)
  */
 void rr_sched_handle_timer_irq(void)
 {
+	if (current_thread->thread_ctx->type != TYPE_IDLE) {
+		if (current_thread->thread_ctx->sc->budget != 0) {
+			--current_thread->thread_ctx->sc->budget;
+		}
+	}
 }
 
 void rr_top(void)
