@@ -97,62 +97,6 @@ static int prints(char **out, const char *string, int width, int flags)
 // you may need to call `prints`
 // you do not need to print prefix like "0x", "0"...
 // Remember the most significant digit is printed first.
-// static int printk_write_num(char **out, long long i, int base, int sign,
-// 			    int width, int flags, int letbase)
-// {
-// 	char print_buf[PRINT_BUF_LEN];
-// 	char *s;
-// 	int t, neg = 0, pc = 0;
-// 	unsigned long long u = i;
-
-// 	if (i == 0) {
-// 		print_buf[0] = '0';
-// 		print_buf[1] = '\0';
-// 		return prints(out, print_buf, width, flags);
-// 	}
-
-// 	if (sign && base == 10 && i < 0) {
-// 		neg = 1;
-// 		u = -i;
-// 	}
-// 	// TODO: fill your code here
-// 	// store the digitals in the buffer `print_buf`:
-// 	// 1. the last postion of this buffer must be '\0'
-// 	// 2. the format is only decided by `base` and `letbase` here
-// 	for (t = neg; u != 0; u /= base) {
-// 		int raw = u % base;
-// 		if (raw < 10) {
-// 			print_buf[t] = '0' + raw;
-// 		} else {
-// 			print_buf[t] = letbase + raw - 10;
-// 		}
-// 		++t;
-// 	}
-
-// 	for (int i = neg, j = t - 1; i < j; ++i, --j) {
-// 		char temp = print_buf[i];
-// 		print_buf[i] = print_buf[j];
-// 		print_buf[j] = temp;
-// 	}
-
-// 	print_buf[t] = '\0';
-// 	s = print_buf + neg;
-
-// 	if (neg) {
-// 		if (width && (flags & PAD_ZERO)) {
-// 			simple_outputchar(out, '-');
-// 			++pc;
-// 			--width;
-// 		} else {
-// 			*--s = '-';
-// 		}
-// 	}
-
-// 	return pc + prints(out, s, width, flags);
-
-// }
-
-
 static int printk_write_num(char **out, long long i, int base, int sign,
 			    int width, int flags, int letbase)
 {
@@ -175,32 +119,24 @@ static int printk_write_num(char **out, long long i, int base, int sign,
 	// store the digitals in the buffer `print_buf`:
 	// 1. the last postion of this buffer must be '\0'
 	// 2. the format is only decided by `base` and `letbase` here
-
-	s = print_buf + PRINT_BUF_LEN - 1;
-	*s = '\0';
-	while(u > 0)
-	{
-		s--;
-		t = u % base;
-		if(t <= 9)
-		{
-			*s = t + '0';
+	for (t = neg; u != 0; u /= base) {
+		int raw = u % base;
+		if (raw < 10) {
+			print_buf[t] = '0' + raw;
+		} else {
+			print_buf[t] = letbase + raw - 10;
 		}
-		else
-		{
-			if (letbase)
-			{
-				*s = t - 10 + 'a';
-			}
-			else
-			{
-				*s = t - 10 + 'A';
-			}
-		}
-		u = u / base;
+		++t;
 	}
 
+	for (int i = neg, j = t - 1; i < j; ++i, --j) {
+		char temp = print_buf[i];
+		print_buf[i] = print_buf[j];
+		print_buf[j] = temp;
+	}
 
+	print_buf[t] = '\0';
+	s = print_buf + neg;
 
 	if (neg) {
 		if (width && (flags & PAD_ZERO)) {
